@@ -14,17 +14,15 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.callbacks import EarlyStopping
-import urllib.request
 import os
 
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# ─── 1. ЗАВАНТАЖЕННЯ РЕАЛЬНОГО ЧАСОВОГО РЯДУ ───────────────────────────────
+# ─── 1. ЗАВАНТАЖЕННЯ РЕАЛЬНОГО ЧАСОВОГО РЯДУ ───────────────────────────
 print("Завантаження реальних фінансових даних...")
 # Використовуємо публічний датасет з цінами акцій Apple
 url = "https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv"
@@ -39,15 +37,13 @@ except Exception as e:
     print("Перевірте підключення до інтернету.")
     exit(1)
 
-# Додаємо трохи штучних аномалій (викидів), щоб ускладнити завдання для мережі,
-# імітуючи різкі стрибки на ринку (близько 5% даних)
 np.random.seed(42)
 N = len(series)
 anomaly_idx = np.random.choice(N, int(0.05 * N), replace=False)
 series[anomaly_idx] += np.random.uniform(-15, 15, len(anomaly_idx))
 
-# ─── 2. ПІДГОТОВКА ДАНИХ ───────────────────────────────────────────────────
-WINDOW = 20       # розмір вікна (вхідних кроків)
+# ─── 2. ПІДГОТОВКА ДАНИХ ───────────────────────────
+WINDOW = 20
 
 scaler = MinMaxScaler()
 scaled = scaler.fit_transform(series.reshape(-1, 1)).flatten()
@@ -62,7 +58,7 @@ split = int(0.8 * len(X))
 X_train, X_test = X[:split], X[split:]
 y_train, y_test = y[:split], y[split:]
 
-# ─── 3. АРХІТЕКТУРИ ДЛЯ ДОСЛІДЖЕННЯ ──────────────────────────────────────
+# ─── 3. АРХІТЕКТУРИ ДЛЯ ДОСЛІДЖЕННЯ ───────────
 architectures = {
     "Tiny  [32]":          [32],
     "Small [64,32]":       [64, 32],
@@ -71,7 +67,7 @@ architectures = {
     "Deep  [128,64,32,16]":[128, 64, 32, 16],
 }
 
-# ─── 4. НАВЧАННЯ ТА ОЦІНКА ────────────────────────────────────────────────
+# ─── 4. НАВЧАННЯ ТА ОЦІНКА ────────────────
 results = {}
 es = EarlyStopping(patience=10, restore_best_weights=True, verbose=0)
 
@@ -104,14 +100,14 @@ for name, layers in architectures.items():
                      'val_loss': hist.history.get('val_loss', [])}
     print(f"{name:<26} {mse:>8.3f} {mae:>8.3f} {elapsed:>8.2f} {epochs_done:>6}")
 
-# ─── 5. ВІЗУАЛІЗАЦІЯ ──────────────────────────────────────────────────────
+# ─── 5. ВІЗУАЛІЗАЦІЯ ────────────────────────────────────────────
 fig, axes = plt.subplots(3, 2, figsize=(16, 14))
 fig.suptitle("R&D: Оптимізація архітектури ANN — Аналіз ефективності (Акції AAPL)", fontsize=14)
 
 real_vals = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
 colors = plt.cm.tab10(np.linspace(0, 1, len(results)))
 
-# --- 5.1 Прогнозування: кращої моделі ---
+# 5.1 Прогнозування: кращої моделі
 best_name = min(results, key=lambda k: results[k]['mse'])
 ax = axes[0, 0]
 ax.plot(real_vals[:300], label='Реальний ряд (Apple Close Price)', color='black', lw=1.5)
@@ -119,7 +115,7 @@ ax.plot(results[best_name]['pred'][:300], label=f'Прогноз ({best_name})',
 ax.set_title(f"Прогнозування — найкраща архітектура: {best_name}")
 ax.set_xlabel("Кроки часу"); ax.set_ylabel("Ціна ($)"); ax.legend(fontsize=8); ax.grid(True, alpha=0.3)
 
-# --- 5.2 MSE по архітектурах ---
+# 5.2 MSE по архітектурах
 ax = axes[0, 1]
 names = list(results.keys())
 mse_vals = [results[n]['mse'] for n in names]
@@ -130,7 +126,7 @@ ax.set_title("MSE залежно від архітектури"); ax.set_ylabel(
 for bar, v in zip(bars, mse_vals):
     ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, f'{v:.2f}', ha='center', fontsize=7)
 
-# --- 5.3 Час навчання ---
+# 5.3 Час навчання
 ax = axes[1, 0]
 time_vals = [results[n]['time'] for n in names]
 bars = ax.bar(range(len(names)), time_vals, color=colors)
@@ -140,7 +136,7 @@ ax.set_title("Час навчання залежно від архітектур
 for bar, v in zip(bars, time_vals):
     ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02, f'{v:.1f}', ha='center', fontsize=7)
 
-# --- 5.4 Компроміс MSE/Час (Pareto) ---
+# 5.4 Компроміс MSE/Час (Pareto)
 ax = axes[1, 1]
 for i, (name, c) in enumerate(zip(names, colors)):
     ax.scatter(results[name]['time'], results[name]['mse'], color=c, s=120, zorder=5, label=name.split('[')[0].strip())
@@ -149,14 +145,14 @@ for i, (name, c) in enumerate(zip(names, colors)):
 ax.set_xlabel("Час навчання (с)"); ax.set_ylabel("MSE")
 ax.set_title("Pareto: MSE vs Час (компроміс точність/швидкість)"); ax.grid(True, alpha=0.3)
 
-# --- 5.5 Криві навчання (loss) ---
+# 5.5 Криві навчання (loss)
 ax = axes[2, 0]
 for name, c in zip(names, colors):
     ax.plot(results[name]['loss'], color=c, label=name.split('[')[0].strip(), lw=1.5)
 ax.set_title("Криві навчання (Train Loss)"); ax.set_xlabel("Епохи"); ax.set_ylabel("MSE Loss")
 ax.legend(fontsize=7); ax.set_yscale('log'); ax.grid(True, alpha=0.3)
 
-# --- 5.6 MAE порівняння ---
+# 5.6 MAE порівняння
 ax = axes[2, 1]
 mae_vals = [results[n]['mae'] for n in names]
 epochs_vals = [results[n]['epochs'] for n in names]
@@ -174,7 +170,7 @@ save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ann_optimi
 plt.savefig(save_path, dpi=150, bbox_inches='tight')
 print(f"\nГрафік збережено: {save_path}")
 
-# ─── 6. ВИСНОВКИ ──────────────────────────────────────────────────────────
+# ─── 6. ВИСНОВКИ ───────────────────────────────────────────
 best_mse = min(results, key=lambda k: results[k]['mse'])
 best_time = min(results, key=lambda k: results[k]['time'])
 worst_mse = max(results, key=lambda k: results[k]['mse'])
@@ -190,7 +186,6 @@ time_cost = results[best_mse]['time'] / results[best_time]['time']
 print(f"  Приріст точності (MSE) : {mse_gain:.1f}%")
 print(f"  Часова ціна кращої моделі: x{time_cost:.1f} відносно найшвидшої")
 print(f"\n  Оптимальний вибір (Pareto): архітектура з балансом MSE/Час —")
-# Знаходимо pareto-optimal: нормалізуємо і беремо мін суму
 norm_mse = np.array([results[n]['mse'] for n in names])
 norm_time = np.array([results[n]['time'] for n in names])
 norm_mse = (norm_mse - norm_mse.min()) / (norm_mse.max() - norm_mse.min() + 1e-9)
